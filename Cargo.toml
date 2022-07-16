@@ -1,8 +1,8 @@
 [package]
 name = "zeroize_alloc"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Aiden McClelland <me@drbonez.dev>"]
-edition = "2018"
+edition = "2021"
 repository = "https://github.com/DR-BoneZ/zeroize-alloc-rs"
 homepage = "https://github.com/DR-BoneZ/zeroize-alloc-rs"
 license = "Apache-2.0"
@@ -16,5 +16,9 @@ keywords = ["zero", "alloc", "zeroize", "allocator"]
 name = "zeroize_alloc"
 path = "src/lib.rs"
 
+[features]
+default = []
+aggressive-inline = []
+
 [dev-dependencies]
-quickcheck = "0.9.0"
+quickcheck = "1"

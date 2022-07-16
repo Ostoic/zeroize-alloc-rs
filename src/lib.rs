@@ -1,9 +1,13 @@
 #![no_std]
+#![feature(allocator_api)]
 
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::{GlobalAlloc, Allocator, Layout};
 
-pub struct ZeroizingAllocator<Alloc: GlobalAlloc>(pub Alloc);
+pub struct ZeroizingGlobalAllocator<Alloc: GlobalAlloc>(pub Alloc);
 
+pub struct ZeroizingAllocator<Alloc: Allocator>(pub Alloc);
+
+#[cfg_attr(feature = "aggressive-inline", inline)]
 unsafe fn zero(ptr: *mut u8, size: usize) {
     for i in 0..size {
         core::ptr::write_volatile(ptr.offset(i as isize), 0);
@@ -11,20 +15,40 @@ unsafe fn zero(ptr: *mut u8, size: usize) {
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
 
-unsafe impl<T> GlobalAlloc for ZeroizingAllocator<T>
+unsafe impl<A> Allocator for ZeroizingAllocator<A>
 where
-    T: GlobalAlloc,
+    A: Allocator
 {
+    #[cfg_attr(feature = "aggressive-inline", inline(always))]
+    fn allocate(&self, layout: Layout) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
+        self.0.allocate(layout)
+    }
+
+    #[cfg_attr(feature = "aggressive-inline", inline(always))]
+    unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: Layout) {
+        zero(ptr.as_ptr(), layout.size());
+        // #[cfg(not(test))]
+        self.0.deallocate(ptr.clone(), layout);
+    }
+}
+
+unsafe impl<A> GlobalAlloc for ZeroizingGlobalAllocator<A>
+where
+    A: GlobalAlloc,
+{
+    #[cfg_attr(feature = "aggressive-inline", inline(always))]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.0.alloc(layout)
     }
 
+    #[cfg_attr(feature = "aggressive-inline", inline(always))]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         zero(ptr, layout.size());
         #[cfg(not(test))]
         self.0.dealloc(ptr, layout);
     }
 
+    #[cfg_attr(feature = "aggressive-inline", inline(always))]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         self.0.alloc_zeroed(layout)
     }
@@ -36,8 +60,8 @@ mod test {
     use std::vec::Vec;
 
     #[global_allocator]
-    static ALLOC: super::ZeroizingAllocator<std::alloc::System> =
-        super::ZeroizingAllocator(std::alloc::System);
+    static ALLOC: super::ZeroizingGlobalAllocator<std::alloc::System> =
+        super::ZeroizingGlobalAllocator(std::alloc::System);
 
     #[test]
     fn test_static() {
